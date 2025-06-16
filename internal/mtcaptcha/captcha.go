@@ -14,9 +14,10 @@ import (
 )
 
 type MTCaptcha struct {
-	SiteKey  string
-	HostName string
-	Client   tlsclient.HttpClient
+	SiteKey   string
+	HostName  string
+	Client    tlsclient.HttpClient
+	UserAgent string
 	
 	sessionID      string
 	resetTS        string
@@ -34,20 +35,22 @@ func New(siteKey, hostName, proxy string) (*MTCaptcha, error) {
 	}
 	if proxy != "" {
 		options = append(options, tlsclient.WithProxyUrl(proxy))
+		options = append(options, tlsclient.WithInsecureSkipVerify())
 	}
 	client, err := tlsclient.NewHttpClient(tlsclient.NewNoopLogger(), options...)
 	if err != nil {
 		return nil, err
 	}
-	
-	return &MTCaptcha{
+	mt := &MTCaptcha{
 		SiteKey:   siteKey,
 		HostName:  hostName,
 		sessionID: sessionID,
 		resetTS:   strconv.FormatInt(time.Now().UnixMilli(), 10),
-		cookie:    fmt.Sprintf("mtv1ConfSum={v:01|wdsz:std|thm:basic|lan:en|chlg:std|clan:1|cstyl:1|afv:0|afot:0|}; jsV=%s;", VERSION),
 		Client:    client,
-	}, nil
+		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+	}
+	mt.cookie = fmt.Sprintf("mtv1ConfSum={v:01|wdsz:std|thm:basic|lan:en|chlg:std|clan:1|cstyl:1|afv:0|afot:0|}; jsV=%s; mtv1Pulse=%s", VERSION, mt.GetPulseData())
+	return mt, nil
 }
 
 func transactionSignature(value string) string {
@@ -57,9 +60,6 @@ func transactionSignature(value string) string {
 }
 
 func (mt *MTCaptcha) GetChallenge() (GetChallengeRes, error) {
-	
-	mt.cookie = fmt.Sprintf("%s mtv1Pulse=%s", mt.cookie, mt.GetPulseData())
-	
 	params := []param{
 		{"sk", mt.SiteKey},
 		{"bd", mt.HostName},

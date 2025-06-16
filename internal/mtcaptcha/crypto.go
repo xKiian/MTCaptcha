@@ -46,44 +46,26 @@ func URLSafeBase4096IntToChar(i int) string {
 func (mt *MTCaptcha) GetPulseData() string {
 	
 	_, offset := time.Now().Zone()
-	input := map[string]interface{}{
-		"v": []int{0, 1},
-		"r": []int{int(math.Floor(rand.Float64() * 4095.99)), int(math.Floor(rand.Float64() * 4095.99))},
-		"n": int(time.Now().Unix()),
-		"z": -offset / 600,
-		"a": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-		"c": mt.cookie,
-		"d": mt.getRef(),
-		"l": "en-US",
-		"h": 10,
-	}
 	
-	_0x1fc26c := make([]int, 13)
-	v := input["v"].([]int)
-	r := input["r"].([]int)
-	n := input["n"].(int)
-	z := input["z"].(int)
-	a := strings.ToLower(fmt.Sprintf("%v", input["a"]))
-	d := strings.ToLower(fmt.Sprintf("%v", input["d"]))
-	l := strings.ToLower(fmt.Sprintf("%v", input["l"]))
-	h := input["h"].(int)
+	pulseMap := make([]int, 13)
+	r := []int{int(math.Floor(rand.Float64() * 4095.99)), int(math.Floor(rand.Float64() * 4095.99))}
+	n := int(time.Now().Unix())
+	a := strings.ToLower(fmt.Sprintf("%v", mt.UserAgent))
+	d := strings.ToLower(fmt.Sprintf("%v", mt.getRef()))
+	l := strings.ToLower(fmt.Sprintf("%v", "en-US"))
 	
-	_0x1fc26c[0] = v[0]
-	_0x1fc26c[1] = v[1]
-	_0x1fc26c[2] = r[0]
-	_0x1fc26c[3] = r[1]
+	pulseMap[0] = 0
+	pulseMap[1] = 1
+	pulseMap[2] = r[0]
+	pulseMap[3] = r[1]
 	
-	_0xfa34f3 := (n / 0x400000) % 0x1000
-	_0x172215 := ((n % 0x400000) >> 0xb) % 0x1000
-	_0x8201d4 := (n % 0x400000) % 0x800
+	pulseMap[4] = (n / 0x400000) % 0x1000
+	pulseMap[5] = ((n % 0x400000) >> 0xb) % 0x1000
+	pulseMap[6] = (n % 0x400000) % 0x800
 	
-	_0x1fc26c[4] = _0xfa34f3
-	_0x1fc26c[5] = _0x172215
-	_0x1fc26c[6] = _0x8201d4
-	
-	div := int(math.Floor(float64(z) / 10.0))
-	_0x1fc26c[7] = int(math.Abs(float64(div % 0x1000)))
-	_0x1fc26c[8] = int(math.Abs(float64(hashStr(a)))) % 0x1000
+	div := int(math.Floor(float64(-offset/600) / 10.0))
+	pulseMap[7] = int(math.Abs(float64(div % 0x1000)))
+	pulseMap[8] = int(math.Abs(float64(hashStr(a)))) % 0x1000
 	
 	re := regexp.MustCompile(`^(?:https?://)?(?:[^@/\n]+@)?(?:www\.)?([^:/\n]+)`)
 	match := re.FindStringSubmatch(d)
@@ -91,24 +73,25 @@ func (mt *MTCaptcha) GetPulseData() string {
 	if len(match) > 1 {
 		domain = match[1]
 	}
-	_0x1fc26c[9] = int(math.Abs(float64(hashStr(domain)))) % 0x1000
-	_0x1fc26c[10] = int(math.Abs(float64(hashStr(l)))) % 0x1000
-	_0x1fc26c[11] = h % 0x1000
 	
-	var _0xaddae8 int32 = 0
+	pulseMap[9] = int(math.Abs(float64(hashStr(domain)))) % 0x1000
+	pulseMap[10] = int(math.Abs(float64(hashStr(l)))) % 0x1000
+	pulseMap[11] = 10 % 0x1000
+	
+	var index int32 = 0
 	for i := 0; i < 12; i++ {
-		_0xaddae8 = _0xaddae8*0x1f + int32(_0x1fc26c[i])
-		_0xaddae8 = _0xaddae8 & _0xaddae8
+		index = index*0x1f + int32(pulseMap[i])
+		index = index & index
 	}
-	_0xaddae8 = int32(math.Abs(float64(_0xaddae8)))
-	_0x1fc26c[12] = int(_0xaddae8) % 0x1000
+	index = int32(math.Abs(float64(index)))
+	pulseMap[12] = int(index) % 0x1000
 	
-	for i := 4; i < len(_0x1fc26c); i++ {
-		_0x1fc26c[i] ^= r[i%2]
+	for i := 4; i < len(pulseMap); i++ {
+		pulseMap[i] ^= r[i%2]
 	}
 	
 	var _0x11126a []string
-	for _, val := range _0x1fc26c {
+	for _, val := range pulseMap {
 		_0x11126a = append(_0x11126a, URLSafeBase4096IntToChar(val))
 	}
 	
