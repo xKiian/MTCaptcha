@@ -1,10 +1,20 @@
 package main
 
-import "mtcaptcha/internal/mtcaptcha"
+import (
+	"fmt"
+	"mtcaptcha/internal/mtcaptcha"
+)
 
 func main() {
-	solver := mtcaptcha.New("MTPublic-KzqLY1cKH", "2captcha.com")
-	solver.GetChallenge()
-	
-	mtcaptcha.GetPulseData()
+	solver, _ := mtcaptcha.New("MTPublic-KzqLY1cKH", "2captcha.com", "")
+	res, err := solver.GetChallenge()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(res)
+	res2, err := solver.GetImage()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(res2)
 }

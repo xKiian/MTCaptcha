@@ -3,8 +3,10 @@ package mtcaptcha
 import (
 	"fmt"
 	"math"
+	"math/rand"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var URLSafeBase64Int2CharMap = []string{
@@ -41,15 +43,17 @@ func URLSafeBase4096IntToChar(i int) string {
 	return URLSafeBase64IntToChar(i>>6) + URLSafeBase64IntToChar(i&63)
 }
 
-func GetPulseData() string {
+func (mt *MTCaptcha) GetPulseData() string {
+	
+	_, offset := time.Now().Zone()
 	input := map[string]interface{}{
 		"v": []int{0, 1},
-		"r": []int{3675, 1423},
-		"n": 1750027007,
-		"z": -12,
+		"r": []int{int(math.Floor(rand.Float64() * 4095.99)), int(math.Floor(rand.Float64() * 4095.99))},
+		"n": int(time.Now().Unix()),
+		"z": -offset / 600,
 		"a": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-		"c": "mtv1ConfSum={v:01|wdsz:std|thm:basic|lan:en|chlg:std|clan:1|cstyl:1|afv:0|afot:0|}; jsV=2024-11-14.21.25.03;",
-		"d": "https://service.mtcaptcha.com/mtcv1/client/iframe.html?v=2024-11-14.21.25.03&sitekey=MTPublic-KzqLY1cKH&iframeId=mtcaptcha-iframe-1&widgetSize=standard&custom=false&widgetInstance=mtcaptcha&challengeType=standard&theme=basic&lang=en&action=&autoFadeOuterText=false&host=https%3A%2F%2F2captcha.com&hostname=2captcha.com&serviceDomain=service.mtcaptcha.com&textLength=0&lowFrictionInvisible=&enableMouseFlow=false&resetTS=1750025017895",
+		"c": mt.cookie,
+		"d": mt.getRef(),
 		"l": "en-US",
 		"h": 10,
 	}
@@ -98,7 +102,7 @@ func GetPulseData() string {
 	}
 	_0xaddae8 = int32(math.Abs(float64(_0xaddae8)))
 	_0x1fc26c[12] = int(_0xaddae8) % 0x1000
-	fmt.Println(_0x1fc26c)
+	
 	for i := 4; i < len(_0x1fc26c); i++ {
 		_0x1fc26c[i] ^= r[i%2]
 	}

@@ -3,25 +3,51 @@ package mtcaptcha
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	http "github.com/bogdanfinn/fhttp"
+	tlsclient "github.com/bogdanfinn/tls-client"
+	"github.com/bogdanfinn/tls-client/profiles"
 	"github.com/google/uuid"
 	"strconv"
 	"time"
 )
 
 type MTCaptcha struct {
-	SiteKey   string
-	HostName  string
-	SessionID string
+	SiteKey  string
+	HostName string
+	Client   tlsclient.HttpClient
+	
+	sessionID      string
+	resetTS        string
+	cookie         string
+	challengeToken string
 }
 
-func New(siteKey, hostName string) *MTCaptcha {
+func New(siteKey, hostName, proxy string) (*MTCaptcha, error) {
 	sessionID := "S1" + uuid.New().String()
+	
+	options := []tlsclient.HttpClientOption{
+		tlsclient.WithTimeoutSeconds(5),
+		tlsclient.WithClientProfile(profiles.Chrome_133),
+		tlsclient.WithCookieJar(tlsclient.NewCookieJar()),
+	}
+	if proxy != "" {
+		options = append(options, tlsclient.WithProxyUrl(proxy))
+	}
+	client, err := tlsclient.NewHttpClient(tlsclient.NewNoopLogger(), options...)
+	if err != nil {
+		return nil, err
+	}
+	
 	return &MTCaptcha{
 		SiteKey:   siteKey,
 		HostName:  hostName,
-		SessionID: sessionID,
-	}
+		sessionID: sessionID,
+		resetTS:   strconv.FormatInt(time.Now().UnixMilli(), 10),
+		cookie:    fmt.Sprintf("mtv1ConfSum={v:01|wdsz:std|thm:basic|lan:en|chlg:std|clan:1|cstyl:1|afv:0|afot:0|}; jsV=%s;", VERSION),
+		Client:    client,
+	}, nil
 }
 
 func transactionSignature(value string) string {
@@ -30,19 +56,75 @@ func transactionSignature(value string) string {
 	return "TH[" + hex.EncodeToString(hash[:]) + "]"
 }
 
-func (mt *MTCaptcha) GetChallenge() {
+func (mt *MTCaptcha) GetChallenge() (GetChallengeRes, error) {
+	
+	mt.cookie = fmt.Sprintf("%s mtv1Pulse=%s", mt.cookie, mt.GetPulseData())
+	
 	params := []param{
 		{"sk", mt.SiteKey},
 		{"bd", mt.HostName},
 		{"rt", strconv.FormatInt(time.Now().UnixMilli(), 10)},
 		{"tsh", transactionSignature(mt.SiteKey)},
 		{"act", "$"}, // _0x1f77ce.action || '$'
-		{"ss", mt.SessionID},
+		{"ss", mt.sessionID},
 		{"lf", "1"}, // textLength | either 0 or 1
 		{"tl", "$"}, // _0x1f77ce.textLength != 0x0 ? _0x1f77ce.textLength : '$'
 		{"lg", "en"},
 		{"tp", "s"}, // _0x1f77ce.widgetSize == _0xdbc730.constant.standard ? 's' : 'm'
 	}
 	
-	fmt.Println(encodeParams(params))
+	url := fmt.Sprintf("https://service.mtcaptcha.com/mtcv1/api/getchallenge.json?%s", encodeParams(params))
+	
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return GetChallengeRes{}, err
+	}
+	
+	req.Header = mt.getHeaders()
+	
+	resp, err := mt.Client.Do(req)
+	if err != nil {
+		return GetChallengeRes{}, err
+	}
+	defer resp.Body.Close()
+	
+	var res GetChallengeRes
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return GetChallengeRes{}, err
+	}
+	
+	mt.challengeToken = res.Result.Challenge.Ct
+	
+	return res, nil
+}
+
+func (mt *MTCaptcha) GetImage() (GetImageRes, error) {
+	params := []param{
+		{"sk", mt.SiteKey},
+		{"ct", mt.challengeToken},
+		{"fa", "$"},
+		{"ss", mt.sessionID},
+	}
+	
+	url := fmt.Sprintf("https://service.mtcaptcha.com/mtcv1/api/getimage.json?%s", encodeParams(params))
+	
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return GetImageRes{}, err
+	}
+	
+	req.Header = mt.getHeaders()
+	
+	resp, err := mt.Client.Do(req)
+	if err != nil {
+		return GetImageRes{}, err
+	}
+	defer resp.Body.Close()
+	
+	var res GetImageRes
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return GetImageRes{}, err
+	}
+	
+	return res, nil
 }
