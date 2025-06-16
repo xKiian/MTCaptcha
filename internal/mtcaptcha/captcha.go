@@ -128,3 +128,59 @@ func (mt *MTCaptcha) GetImage() (GetImageRes, error) {
 	
 	return res, nil
 }
+
+func (mt *MTCaptcha) SolveChallenge(challenge GetChallengeRes, solution string) (GetChallengeRes, error) {
+	fold := challenge.Result.Challenge.FoldChlg
+	
+	foldAnswer := "$"
+	if challenge.Result.Challenge.HasFoldChlg {
+		
+		var err error
+		foldAnswer, err = SolveFoldChallenge(fold.Fseed, fold.Fslots, fold.Fdepth)
+		if err != nil {
+			return GetChallengeRes{}, err
+		}
+	}
+	params := []param{
+		{"ct", mt.challengeToken},
+		{"sk", mt.SiteKey},
+		{"st", solution},
+		{"lf", "1"},
+		{"bd", mt.HostName},
+		{"rt", strconv.FormatInt(time.Now().UnixMilli(), 10)},
+		{"tsh", transactionSignature(mt.SiteKey)},
+		{"fa", foldAnswer},
+		{"qh", "$"}, //TODO look into automatedTestCode
+		{"act", "$"},
+		{"ss", mt.sessionID},
+		{"tl", "$"}, // textLength
+		{"lg", "en"},
+		{"tp", "s"},
+		{"kt", ""},
+		{"fs", fold.Fseed},
+	}
+	
+	url := fmt.Sprintf("https://service.mtcaptcha.com/mtcv1/api/getchallenge.json?%s", encodeParams(params))
+	
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return GetChallengeRes{}, err
+	}
+	
+	req.Header = mt.getHeaders()
+	
+	resp, err := mt.Client.Do(req)
+	if err != nil {
+		return GetChallengeRes{}, err
+	}
+	defer resp.Body.Close()
+	
+	var res GetChallengeRes
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return GetChallengeRes{}, err
+	}
+	
+	mt.challengeToken = res.Result.Challenge.Ct
+	
+	return res, nil
+}

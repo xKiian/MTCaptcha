@@ -1,6 +1,7 @@
 package mtcaptcha
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -8,6 +9,25 @@ import (
 	"strings"
 	"time"
 )
+
+var URLSafeBase64CharCode2IntMap = [256]int{
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, -1,
+	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, -1, -1, -1, -1, -1, -1,
+	-1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+	25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, -1, -1, -1, -1, 63,
+	-1, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
+	51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, -1, -1, -1,
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+}
 
 var URLSafeBase64Int2CharMap = []string{
 	"0", "1", "2", "3", "4", "5", "6", "7",
@@ -20,11 +40,21 @@ var URLSafeBase64Int2CharMap = []string{
 	"u", "v", "w", "x", "y", "z", "-", "_",
 }
 
-func hashStr(s string) int32 {
-	var h int32 = 0
+func URLSafeBase64CharToInt(c rune) (int, error) {
+	if int(c) >= 0 && int(c) < 256 {
+		val := URLSafeBase64CharCode2IntMap[c%256]
+		if val >= 0 {
+			return val, nil
+		}
+	}
+	return -1, errors.New("arg charCode must be within chars [a-zA-Z0-9:;]")
+}
+
+func hashStr(s string) int {
+	h := 0
 	for _, c := range s {
-		h = (h << 5) - h + int32(c)
-		h = h & h // force overflow
+		h = (h << 5) - h + int(c)
+		h = int(int32(h))
 	}
 	return h
 }
@@ -36,11 +66,88 @@ func URLSafeBase64IntToChar(i int) string {
 	return URLSafeBase64Int2CharMap[i%64]
 }
 
+func URLSafeBase64Str2IntArray(s string) ([]int, error) {
+	res := make([]int, 0, len(s))
+	for _, ch := range s {
+		i, err := URLSafeBase64CharToInt(ch)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, i)
+	}
+	return res, nil
+}
+
 func URLSafeBase4096IntToChar(i int) string {
 	if i < 0 || i > 4095 {
 		panic("arg i must be between 0 .. 4095 inclusive")
 	}
-	return URLSafeBase64IntToChar(i>>6) + URLSafeBase64IntToChar(i&63)
+	
+	hi := URLSafeBase64IntToChar(i >> 6)
+	lo := URLSafeBase64IntToChar(i & 63)
+	
+	return hi + lo
+}
+
+func foldBase64IntArray(a1 []int, foldCount int) []int {
+	a2 := make([]int, len(a1))
+	copy(a2, a1)
+	reverse(a2)
+	a3 := make([]int, len(a1))
+	copy(a3, a1)
+	
+	offset := 0
+	x := 0
+	y := 0
+	z := 0
+	for i := 0; i < foldCount; i++ {
+		offset++
+		for x = 0; x < len(a1); x++ {
+			a3[x] = (int(math.Floor(float64(a3[x]+a2[(x+offset)%len(a2)])*73/8)) + y + z) % 64
+			z = y / 2
+			y = a3[x] / 2
+		}
+	}
+	return a3
+}
+
+func hashIntAry(a []int) int {
+	h := 0
+	for _, v := range a {
+		h = (h << 5) - h + v
+		h = int(int32(h))
+	}
+	if h < 0 {
+		h *= -1
+	}
+	return h
+}
+
+func SolveFoldChallenge(str string, depth, xor int) (string, error) {
+	if str == "" || depth < 1 {
+		return "0", nil
+	}
+	
+	result := make([]string, 0, depth)
+	
+	arr, err := URLSafeBase64Str2IntArray(str)
+	if err != nil {
+		return "", err
+	}
+	
+	for i := 0; i < depth; i++ {
+		arr = foldBase64IntArray(arr, 31)
+		hashed := hashIntAry(foldBase64IntArray(arr, xor)) % 4096
+		result = append(result, URLSafeBase4096IntToChar(hashed))
+	}
+	
+	return strings.Join(result, ""), nil
+}
+
+func reverse(a []int) {
+	for i, j := 0, len(a)-1; i < j; i, j = i+1, j-1 {
+		a[i], a[j] = a[j], a[i]
+	}
 }
 
 func (mt *MTCaptcha) GetPulseData() string {

@@ -17,4 +17,6 @@ func main() {
 		panic(err)
 	}
 	fmt.Println(res2)
+	
+	fmt.Print(mtcaptcha.SolveFoldChallenge("VSUFhjii7scj36xjdJJgYVCyK7pJ_s0tUX8cjI68iDb5izqgVyHXZDwcJJcDNHSb", 30, 995))
 }
