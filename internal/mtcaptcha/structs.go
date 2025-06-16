@@ -47,3 +47,18 @@ type GetImageRes struct {
 		Field2 string `json:"_"`
 	} `json:"result"`
 }
+
+type VerifyRes struct {
+	Schema string `json:"schema"`
+	Code   int    `json:"code"`
+	Result struct {
+		VerifyResult struct {
+			IsVerified    bool `json:"isVerified"`
+			VerifiedToken struct {
+				Vt    string `json:"vt"`
+				Vtttl int    `json:"vtttl"`
+			} `json:"verifiedToken"`
+		} `json:"verifyResult"`
+		Field2 string `json:"_"`
+	} `json:"result"`
+}

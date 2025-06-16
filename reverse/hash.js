@@ -91,16 +91,7 @@ function solve(_0x2ffbc4, _0x58b40d, _0x44c1a6) {
     return _0x5aca29.join('');
 }
 
-function grr() {
-    if (this.ciderb64int == null) {
-        return '0';
-    }
-    var _0x49e5a = new Array(this.keehist.length);
-    for (var _0x302d6d = 0x0; _0x302d6d < this.keehist.length; _0x302d6d++) {
-        _0x49e5a[_0x302d6d] = this.URLSafeBase64Int2CharMap[this.keehist[_0x302d6d]];
-    }
-    return _0x49e5a.join('');
-}
+
 _0x5eb8fb = {
     "v": [0, 1],
     "r": [3675, 1423],

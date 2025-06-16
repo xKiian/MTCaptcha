@@ -1,6 +1,7 @@
 package mtcaptcha
 
 import (
+	"bufio"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
@@ -9,7 +10,9 @@ import (
 	tlsclient "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 	"github.com/google/uuid"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -98,7 +101,7 @@ func (mt *MTCaptcha) GetChallenge() (GetChallengeRes, error) {
 	return res, nil
 }
 
-func (mt *MTCaptcha) GetImage() (GetImageRes, error) {
+func (mt *MTCaptcha) GetImage() (string, error) {
 	params := []param{
 		{"sk", mt.SiteKey},
 		{"ct", mt.challengeToken},
@@ -110,26 +113,26 @@ func (mt *MTCaptcha) GetImage() (GetImageRes, error) {
 	
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return GetImageRes{}, err
+		return "", err
 	}
 	
 	req.Header = mt.getHeaders()
 	
 	resp, err := mt.Client.Do(req)
 	if err != nil {
-		return GetImageRes{}, err
+		return "", err
 	}
 	defer resp.Body.Close()
 	
 	var res GetImageRes
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return GetImageRes{}, err
+		return "", err
 	}
 	
-	return res, nil
+	return res.Result.Img.Image64, nil
 }
 
-func (mt *MTCaptcha) SolveChallenge(challenge GetChallengeRes, solution string) (GetChallengeRes, error) {
+func (mt *MTCaptcha) SolveChallenge(challenge GetChallengeRes, solution string) (VerifyRes, error) {
 	fold := challenge.Result.Challenge.FoldChlg
 	
 	foldAnswer := "$"
@@ -138,7 +141,7 @@ func (mt *MTCaptcha) SolveChallenge(challenge GetChallengeRes, solution string) 
 		var err error
 		foldAnswer, err = SolveFoldChallenge(fold.Fseed, fold.Fslots, fold.Fdepth)
 		if err != nil {
-			return GetChallengeRes{}, err
+			return VerifyRes{}, err
 		}
 	}
 	params := []param{
@@ -156,31 +159,53 @@ func (mt *MTCaptcha) SolveChallenge(challenge GetChallengeRes, solution string) 
 		{"tl", "$"}, // textLength
 		{"lg", "en"},
 		{"tp", "s"},
-		{"kt", ""},
+		{"kt", GenerateKee(fold.Fseed, solution)},
 		{"fs", fold.Fseed},
 	}
 	
-	url := fmt.Sprintf("https://service.mtcaptcha.com/mtcv1/api/getchallenge.json?%s", encodeParams(params))
+	url := fmt.Sprintf("https://service.mtcaptcha.com/mtcv1/api/solvechallenge.json?%s", encodeParams(params))
 	
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return GetChallengeRes{}, err
+		return VerifyRes{}, err
 	}
 	
 	req.Header = mt.getHeaders()
 	
 	resp, err := mt.Client.Do(req)
 	if err != nil {
-		return GetChallengeRes{}, err
+		return VerifyRes{}, err
 	}
 	defer resp.Body.Close()
 	
-	var res GetChallengeRes
+	var res VerifyRes
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return GetChallengeRes{}, err
+		return VerifyRes{}, err
 	}
 	
-	mt.challengeToken = res.Result.Challenge.Ct
-	
 	return res, nil
+}
+func (mt *MTCaptcha) Solve() (string, error) {
+	res, err := mt.GetChallenge()
+	if err != nil {
+		return "", err
+	}
+	
+	image, err := mt.GetImage()
+	if err != nil {
+		return "", err
+	}
+	
+	fmt.Println(image)
+	
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter input: ")
+	input, _ := reader.ReadString('\n')
+	
+	solved, err := mt.SolveChallenge(res, strings.TrimSpace(input))
+	if err != nil {
+		return "", err
+	}
+	
+	return solved.Result.VerifyResult.VerifiedToken.Vt, nil
 }
